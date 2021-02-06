@@ -1,0 +1,13 @@
+{
+  "name": "serverless-bookstore",
+  "private": true,
+  "version": "1.0.0",
+  "description": "1. Create serverless project  2. Create the resources 3. Create the appsync api 4. Deploy and test",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
