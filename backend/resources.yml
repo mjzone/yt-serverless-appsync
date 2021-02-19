@@ -3,43 +3,57 @@ booksTable:
   Type: AWS::DynamoDB::Table
   Properties:
     AttributeDefinitions:
-      - AttributeName: "BookId"
+      - AttributeName: "bookId"
         AttributeType: "S"
     BillingMode: PAY_PER_REQUEST
     KeySchema:
-      - AttributeName: "BookId"
+      - AttributeName: "bookId"
         KeyType: "HASH"
     Tags:
+      - Key: Environment
+        Value: ${self:provider.stage}
       - Key: Name
-        Value: booksTable-${self:provider.stage}
+        Value: books-table
 
 # Orders table
 ordersTable:
   Type: AWS::DynamoDB::Table
   Properties:
     AttributeDefinitions:
-      - AttributeName: "UserId"
+      - AttributeName: "userId"
         AttributeType: "S"
-      - AttributeName: "OrderId"
+      - AttributeName: "orderId"
         AttributeType: "S"
-      - AttributeName: "CreatedAt"
+      - AttributeName: "bookId"
+        AttributeType: "S"
+      - AttributeName: "createdAt"
         AttributeType: "S"
     BillingMode: PAY_PER_REQUEST
     KeySchema:
-      - AttributeName: "UserId"
+      - AttributeName: "userId"
         KeyType: "HASH"
-      - AttributeName: "CreatedAt"
+      - AttributeName: "orderId"
         KeyType: "RANGE"
     GlobalSecondaryIndexes:
-      - IndexName: "byOrderId"
+      - IndexName: "byOrder"
         KeySchema:
-          - AttributeName: "OrderId"
+          - AttributeName: "orderId"
             KeyType: "HASH"
         Projection:
           ProjectionType: ALL
+      - IndexName: "byBook"
+        KeySchema:
+          - AttributeName: "bookId"
+            KeyType: "HASH"
+          - AttributeName: "createdAt"
+            KeyType: "RANGE"
+        Projection:
+          ProjectionType: ALL
     Tags:
+      - Key: Environment
+        Value: ${self:provider.stage}
       - Key: Name
-        Value: ordersTable-${self:provider.stage}
+        Value: orders-table
 
 # Cognito user pool
 cognitoUserPool:
@@ -60,6 +74,10 @@ cognitoUserPoolClient:
   Properties:
     ClientName: Web
     UserPoolId: !Ref cognitoUserPool
+    ExplicitAuthFlows: 
+      - ALLOW_USER_SRP_AUTH
+      - ALLOW_USER_PASSWORD_AUTH
+      - ALLOW_REFRESH_TOKEN_AUTH
 
 # Cognito Admin group
 cognitoAdminGroup:

@@ -7,10 +7,29 @@ provider:
   lambdaHashingVersion: 20201221
   stage: ${opt:stage, 'dev'}
   region: us-east-2
+  iamRoleStatements:
+    - Effect: Allow
+      Action: dynamodb:BatchWriteItem
+      Resource: !GetAtt ordersTable.Arn 
+
+custom:
+  appSync:
+    - ${file(appsync-api.yml)}
+
+plugins:
+  - serverless-appsync-plugin
+
+functions:
+  createOrder:
+    handler: functions/createOrder.handler
+    environment:
+      BOOK_TABLE_NAME: !Ref booksTable
+      ORDER_TABLE_NAME: !Ref ordersTable
 
 package:
   exclude:
     - package.json
+    - package-lock.json
     - README.md
 
 # Cloudformation resources

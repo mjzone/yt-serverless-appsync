@@ -1,0 +1,63 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  listBooks(limit: Int!, nextToken: String): BooksPage! #DynamoDB resolver
+  getBookById(bookId: ID!): Book! #DynamoDB resolver
+  myOrders(limit: Int!, nextToken: String): OrderPage!
+}
+
+type BooksPage {
+  books: [Book]
+  nextToken: String
+}
+
+type Book {
+  bookId: ID!
+  title: String!
+  description: String
+  imageUrl: AWSURL
+  author: String!
+  price: Float!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type OrderPage {
+  orders: [Order]
+  nextToken: String
+}
+
+type Order {
+  userId: ID! # Taken from the cognito id_token username/sub
+  orderId: ID!
+  book: Book!
+  quantity: Int!
+}
+
+type Mutation {
+  #DynamoDB resolver. Only admins can execute it
+  createBook(newBook: BookInput): Book! @aws_auth(cognito_groups: ["Admin"]) 
+  
+  #Lambda resolver that handles bulk insert
+  createOrder(newOrder: OrderInput): Boolean!
+}
+
+input BookInput {
+  title: String!
+  description: String
+  imageUrl: AWSURL
+  author: String!
+  price: Float!
+}
+
+input OrderInput {
+  items: [OrderItemInput]!
+}
+
+input OrderItemInput {
+  bookId: ID!
+  quantity: Int!
+}

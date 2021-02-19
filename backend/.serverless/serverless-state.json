@@ -5,12 +5,24 @@
       "name": "serverless-bookstore"
     },
     "provider": {
+      "stage": "dev",
+      "variableSyntax": "\\${([^{}:]+?(?:\\(|:)[^:{}][^{}]*?)}",
       "name": "aws",
       "runtime": "nodejs12.x",
-      "lambdaHashingVersion": "20201221",
-      "stage": "dev",
+      "lambdaHashingVersion": 20201221,
       "region": "us-east-2",
-      "variableSyntax": "\\${([^{}:]+?(?:\\(|:)(?:[^:{}][^{}]*?)?)}",
+      "iamRoleStatements": [
+        {
+          "Effect": "Allow",
+          "Action": "dynamodb:BatchWriteItem",
+          "Resource": {
+            "Fn::GetAtt": [
+              "ordersTable",
+              "Arn"
+            ]
+          }
+        }
+      ],
       "versionFunctions": true,
       "compiledCloudFormationTemplate": {
         "AWSTemplateFormatVersion": "2010-09-09",
@@ -58,21 +70,6 @@
                             "/*"
                           ]
                         ]
-                      },
-                      {
-                        "Fn::Join": [
-                          "",
-                          [
-                            "arn:",
-                            {
-                              "Ref": "AWS::Partition"
-                            },
-                            ":s3:::",
-                            {
-                              "Ref": "ServerlessDeploymentBucket"
-                            }
-                          ]
-                        ]
                       }
                     ],
                     "Condition": {
@@ -85,26 +82,161 @@
               }
             }
           },
+          "CreateOrderLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/serverless-bookstore-dev-createOrder"
+            }
+          },
+          "IamRoleLambdaExecution": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+              "AssumeRolePolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": [
+                        "lambda.amazonaws.com"
+                      ]
+                    },
+                    "Action": [
+                      "sts:AssumeRole"
+                    ]
+                  }
+                ]
+              },
+              "Policies": [
+                {
+                  "PolicyName": {
+                    "Fn::Join": [
+                      "-",
+                      [
+                        "serverless-bookstore",
+                        "dev",
+                        "lambda"
+                      ]
+                    ]
+                  },
+                  "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Effect": "Allow",
+                        "Action": [
+                          "logs:CreateLogStream",
+                          "logs:CreateLogGroup"
+                        ],
+                        "Resource": [
+                          {
+                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/serverless-bookstore-dev*:*"
+                          }
+                        ]
+                      },
+                      {
+                        "Effect": "Allow",
+                        "Action": [
+                          "logs:PutLogEvents"
+                        ],
+                        "Resource": [
+                          {
+                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/serverless-bookstore-dev*:*:*"
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "$[\"service\"][\"provider\"][\"iamRoleStatements\"][0]"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "Path": "/",
+              "RoleName": {
+                "Fn::Join": [
+                  "-",
+                  [
+                    "serverless-bookstore",
+                    "dev",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    "lambdaRole"
+                  ]
+                ]
+              }
+            }
+          },
+          "CreateOrderLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": {
+                  "Ref": "ServerlessDeploymentBucket"
+                },
+                "S3Key": "serverless/serverless-bookstore/dev/1613771467585-2021-02-19T21:51:07.585Z/serverless-bookstore.zip"
+              },
+              "FunctionName": "serverless-bookstore-dev-createOrder",
+              "Handler": "functions/createOrder.handler",
+              "MemorySize": 1024,
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              },
+              "Runtime": "nodejs12.x",
+              "Timeout": 6,
+              "Environment": {
+                "Variables": {
+                  "BOOK_TABLE_NAME": {
+                    "Ref": "booksTable"
+                  },
+                  "ORDER_TABLE_NAME": {
+                    "Ref": "ordersTable"
+                  }
+                }
+              }
+            },
+            "DependsOn": [
+              "CreateOrderLogGroup"
+            ]
+          },
+          "CreateOrderLambdaVersionXcxX0oq16lRc4uRn2Vrm3Lcb9gF5HbCoM9FSmAMuy4": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "CreateOrderLambdaFunction"
+              },
+              "CodeSha256": "+7XNPGWgYM7DcmPE3/okvbJs8J9iR7sG1eXE+2iaFYU="
+            }
+          },
           "booksTable": {
             "Type": "AWS::DynamoDB::Table",
             "Properties": {
               "AttributeDefinitions": [
                 {
-                  "AttributeName": "BookId",
+                  "AttributeName": "bookId",
                   "AttributeType": "S"
                 }
               ],
               "BillingMode": "PAY_PER_REQUEST",
               "KeySchema": [
                 {
-                  "AttributeName": "BookId",
+                  "AttributeName": "bookId",
                   "KeyType": "HASH"
                 }
               ],
               "Tags": [
                 {
+                  "Key": "Environment",
+                  "Value": "dev"
+                },
+                {
                   "Key": "Name",
-                  "Value": "booksTable-dev"
+                  "Value": "books-table"
                 }
               ]
             }
@@ -114,36 +246,56 @@
             "Properties": {
               "AttributeDefinitions": [
                 {
-                  "AttributeName": "UserId",
+                  "AttributeName": "userId",
                   "AttributeType": "S"
                 },
                 {
-                  "AttributeName": "OrderId",
+                  "AttributeName": "orderId",
                   "AttributeType": "S"
                 },
                 {
-                  "AttributeName": "CreatedAt",
+                  "AttributeName": "bookId",
+                  "AttributeType": "S"
+                },
+                {
+                  "AttributeName": "createdAt",
                   "AttributeType": "S"
                 }
               ],
               "BillingMode": "PAY_PER_REQUEST",
               "KeySchema": [
                 {
-                  "AttributeName": "UserId",
+                  "AttributeName": "userId",
                   "KeyType": "HASH"
                 },
                 {
-                  "AttributeName": "CreatedAt",
+                  "AttributeName": "orderId",
                   "KeyType": "RANGE"
                 }
               ],
               "GlobalSecondaryIndexes": [
                 {
-                  "IndexName": "byOrderId",
+                  "IndexName": "byOrder",
                   "KeySchema": [
                     {
-                      "AttributeName": "OrderId",
+                      "AttributeName": "orderId",
                       "KeyType": "HASH"
+                    }
+                  ],
+                  "Projection": {
+                    "ProjectionType": "ALL"
+                  }
+                },
+                {
+                  "IndexName": "byBook",
+                  "KeySchema": [
+                    {
+                      "AttributeName": "bookId",
+                      "KeyType": "HASH"
+                    },
+                    {
+                      "AttributeName": "createdAt",
+                      "KeyType": "RANGE"
                     }
                   ],
                   "Projection": {
@@ -153,8 +305,12 @@
               ],
               "Tags": [
                 {
+                  "Key": "Environment",
+                  "Value": "dev"
+                },
+                {
                   "Key": "Name",
-                  "Value": "ordersTable-dev"
+                  "Value": "orders-table"
                 }
               ]
             }
@@ -182,7 +338,12 @@
               "ClientName": "Web",
               "UserPoolId": {
                 "Ref": "cognitoUserPool"
-              }
+              },
+              "ExplicitAuthFlows": [
+                "ALLOW_USER_SRP_AUTH",
+                "ALLOW_USER_PASSWORD_AUTH",
+                "ALLOW_REFRESH_TOKEN_AUTH"
+              ]
             }
           },
           "cognitoAdminGroup": {
@@ -349,12 +510,485 @@
                 }
               ]
             }
+          },
+          "BookstoreslsapiGraphQlApi": {
+            "Type": "AWS::AppSync::GraphQLApi",
+            "Properties": {
+              "Name": "bookstoreslsapi",
+              "AuthenticationType": "AMAZON_COGNITO_USER_POOLS",
+              "AdditionalAuthenticationProviders": [],
+              "UserPoolConfig": {
+                "AwsRegion": "us-east-2",
+                "UserPoolId": {
+                  "Ref": "cognitoUserPool"
+                },
+                "DefaultAction": "ALLOW"
+              },
+              "XrayEnabled": false
+            }
+          },
+          "BookstoreslsapiGraphQlSchema": {
+            "Type": "AWS::AppSync::GraphQLSchema",
+            "Properties": {
+              "Definition": "schema {\n  query: Query\n  mutation: Mutation\n}\n\ntype Query {\n  listBooks(limit: Int!, nextToken: String): BooksPage!   getBookById(bookId: ID!): Book!   myOrders(limit: Int!, nextToken: String): OrderPage!\n}\n\ntype BooksPage {\n  books: [Book]\n  nextToken: String\n}\n\ntype Book {\n  bookId: ID!\n  title: String!\n  description: String\n  imageUrl: AWSURL\n  author: String!\n  price: Float!\n  createdAt: AWSDateTime!\n  updatedAt: AWSDateTime!\n}\n\ntype OrderPage {\n  orders: [Order]\n  nextToken: String\n}\n\ntype Order {\n  userId: ID!   orderId: ID!\n  book: Book!\n  quantity: Int!\n}\n\ntype Mutation {\n    createBook(newBook: BookInput): Book! @aws_auth(cognito_groups: [\"Admin\"]) \n  \n    createOrder(newOrder: OrderInput): Boolean!\n}\n\ninput BookInput {\n  title: String!\n  description: String\n  imageUrl: AWSURL\n  author: String!\n  price: Float!\n}\n\ninput OrderInput {\n  items: [OrderItemInput]!\n}\n\ninput OrderItemInput {\n  bookId: ID!\n  quantity: Int!\n}",
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              }
+            }
+          },
+          "BookstoreslsapiGraphQlDsbooksTableRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+              "AssumeRolePolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": [
+                        "appsync.amazonaws.com"
+                      ]
+                    },
+                    "Action": [
+                      "sts:AssumeRole"
+                    ]
+                  }
+                ]
+              },
+              "Policies": [
+                {
+                  "PolicyName": "GraphQlDsbooksTablePolicy",
+                  "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Action": [
+                          "dynamodb:DeleteItem",
+                          "dynamodb:GetItem",
+                          "dynamodb:PutItem",
+                          "dynamodb:Query",
+                          "dynamodb:Scan",
+                          "dynamodb:UpdateItem",
+                          "dynamodb:BatchGetItem",
+                          "dynamodb:BatchWriteItem",
+                          "dynamodb:ConditionCheckItem"
+                        ],
+                        "Effect": "Allow",
+                        "Resource": [
+                          {
+                            "Fn::Join": [
+                              ":",
+                              [
+                                "arn",
+                                "aws",
+                                "dynamodb",
+                                "us-east-2",
+                                {
+                                  "Ref": "AWS::AccountId"
+                                },
+                                {
+                                  "Fn::Join": [
+                                    "/",
+                                    [
+                                      "table",
+                                      {
+                                        "Ref": "booksTable"
+                                      }
+                                    ]
+                                  ]
+                                }
+                              ]
+                            ]
+                          },
+                          {
+                            "Fn::Join": [
+                              "/",
+                              [
+                                {
+                                  "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"BookstoreslsapiGraphQlDsbooksTableRole\"][\"Properties\"][\"Policies\"][0][\"PolicyDocument\"][\"Statement\"][0][\"Resource\"][0]"
+                                },
+                                "*"
+                              ]
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "BookstoreslsapiGraphQlDsordersTableRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+              "AssumeRolePolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": [
+                        "appsync.amazonaws.com"
+                      ]
+                    },
+                    "Action": [
+                      "sts:AssumeRole"
+                    ]
+                  }
+                ]
+              },
+              "Policies": [
+                {
+                  "PolicyName": "GraphQlDsordersTablePolicy",
+                  "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Action": [
+                          "dynamodb:DeleteItem",
+                          "dynamodb:GetItem",
+                          "dynamodb:PutItem",
+                          "dynamodb:Query",
+                          "dynamodb:Scan",
+                          "dynamodb:UpdateItem",
+                          "dynamodb:BatchGetItem",
+                          "dynamodb:BatchWriteItem",
+                          "dynamodb:ConditionCheckItem"
+                        ],
+                        "Effect": "Allow",
+                        "Resource": [
+                          {
+                            "Fn::Join": [
+                              ":",
+                              [
+                                "arn",
+                                "aws",
+                                "dynamodb",
+                                "us-east-2",
+                                {
+                                  "Ref": "AWS::AccountId"
+                                },
+                                {
+                                  "Fn::Join": [
+                                    "/",
+                                    [
+                                      "table",
+                                      {
+                                        "Ref": "ordersTable"
+                                      }
+                                    ]
+                                  ]
+                                }
+                              ]
+                            ]
+                          },
+                          {
+                            "Fn::Join": [
+                              "/",
+                              [
+                                {
+                                  "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"BookstoreslsapiGraphQlDsordersTableRole\"][\"Properties\"][\"Policies\"][0][\"PolicyDocument\"][\"Statement\"][0][\"Resource\"][0]"
+                                },
+                                "*"
+                              ]
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "BookstoreslsapiGraphQlDscreateOrderFunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+              "AssumeRolePolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": [
+                        "appsync.amazonaws.com"
+                      ]
+                    },
+                    "Action": [
+                      "sts:AssumeRole"
+                    ]
+                  }
+                ]
+              },
+              "Policies": [
+                {
+                  "PolicyName": "GraphQlDscreateOrderFunctionPolicy",
+                  "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Action": [
+                          "lambda:invokeFunction"
+                        ],
+                        "Effect": "Allow",
+                        "Resource": [
+                          {
+                            "Fn::GetAtt": [
+                              "CreateOrderLambdaFunction",
+                              "Arn"
+                            ]
+                          },
+                          {
+                            "Fn::Join": [
+                              ":",
+                              [
+                                {
+                                  "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"BookstoreslsapiGraphQlDscreateOrderFunctionRole\"][\"Properties\"][\"Policies\"][0][\"PolicyDocument\"][\"Statement\"][0][\"Resource\"][0]"
+                                },
+                                "*"
+                              ]
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "BookstoreslsapiGraphQlDsbooksTable": {
+            "Type": "AWS::AppSync::DataSource",
+            "Properties": {
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              },
+              "Name": "booksTable",
+              "Type": "AMAZON_DYNAMODB",
+              "ServiceRoleArn": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlDsbooksTableRole",
+                  "Arn"
+                ]
+              },
+              "DynamoDBConfig": {
+                "AwsRegion": "us-east-2",
+                "TableName": {
+                  "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"BookstoreslsapiGraphQlDsbooksTableRole\"][\"Properties\"][\"Policies\"][0][\"PolicyDocument\"][\"Statement\"][0][\"Resource\"][0][\"Fn::Join\"][1][5][\"Fn::Join\"][1][1]"
+                },
+                "UseCallerCredentials": false,
+                "Versioned": false
+              }
+            }
+          },
+          "BookstoreslsapiGraphQlDsordersTable": {
+            "Type": "AWS::AppSync::DataSource",
+            "Properties": {
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              },
+              "Name": "ordersTable",
+              "Type": "AMAZON_DYNAMODB",
+              "ServiceRoleArn": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlDsordersTableRole",
+                  "Arn"
+                ]
+              },
+              "DynamoDBConfig": {
+                "AwsRegion": "us-east-2",
+                "TableName": {
+                  "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"BookstoreslsapiGraphQlDsordersTableRole\"][\"Properties\"][\"Policies\"][0][\"PolicyDocument\"][\"Statement\"][0][\"Resource\"][0][\"Fn::Join\"][1][5][\"Fn::Join\"][1][1]"
+                },
+                "UseCallerCredentials": false,
+                "Versioned": false
+              }
+            }
+          },
+          "BookstoreslsapiGraphQlDscreateOrderFunction": {
+            "Type": "AWS::AppSync::DataSource",
+            "Properties": {
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              },
+              "Name": "createOrderFunction",
+              "Type": "AWS_LAMBDA",
+              "ServiceRoleArn": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlDscreateOrderFunctionRole",
+                  "Arn"
+                ]
+              },
+              "LambdaConfig": {
+                "LambdaFunctionArn": {
+                  "Fn::GetAtt": [
+                    "CreateOrderLambdaFunction",
+                    "Arn"
+                  ]
+                }
+              }
+            }
+          },
+          "BookstoreslsapiGraphQlResolverQuerygetBookById": {
+            "Type": "AWS::AppSync::Resolver",
+            "DependsOn": "BookstoreslsapiGraphQlSchema",
+            "Properties": {
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              },
+              "TypeName": "Query",
+              "FieldName": "getBookById",
+              "RequestMappingTemplate": "{\n    \"version\" : \"2017-02-28\",\n    \"operation\" : \"GetItem\",\n    \"key\" : {\n        \"bookId\" : $util.dynamodb.toDynamoDBJson($ctx.args.bookId)\n    }\n}",
+              "ResponseMappingTemplate": "$util.toJson($ctx.result)",
+              "Kind": "UNIT",
+              "DataSourceName": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlDsbooksTable",
+                  "Name"
+                ]
+              }
+            }
+          },
+          "BookstoreslsapiGraphQlResolverQuerylistBooks": {
+            "Type": "AWS::AppSync::Resolver",
+            "DependsOn": "BookstoreslsapiGraphQlSchema",
+            "Properties": {
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              },
+              "TypeName": "Query",
+              "FieldName": "listBooks",
+              "RequestMappingTemplate": "{\n    \"version\" : \"2017-02-28\",\n    \"operation\" : \"Scan\",\n    \"limit\" : $util.toJson($ctx.args.limit),\n    \"consistentRead\" : false,\n    \"nextToken\" : $util.toJson($util.defaultIfNullOrBlank($ctx.args.nextToken, undefined))\n}",
+              "ResponseMappingTemplate": "{\n    \"books\": $util.toJson($ctx.result.items),\n    \"nextToken\": $util.toJson($util.defaultIfNullOrBlank($ctx.result.nextToken, null))\n}\n",
+              "Kind": "UNIT",
+              "DataSourceName": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlDsbooksTable",
+                  "Name"
+                ]
+              }
+            }
+          },
+          "BookstoreslsapiGraphQlResolverQuerymyOrders": {
+            "Type": "AWS::AppSync::Resolver",
+            "DependsOn": "BookstoreslsapiGraphQlSchema",
+            "Properties": {
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              },
+              "TypeName": "Query",
+              "FieldName": "myOrders",
+              "RequestMappingTemplate": "{\n    \"version\" : \"2017-02-28\",\n    \"operation\" : \"Query\",\n    \"query\" : {\n        \"expression\" : \"#userId = :userId\",\n        \"expressionNames\" : {\n            \"#userId\" : \"userId\"\n        },\n        \"expressionValues\" : {\n            \":userId\" : $util.dynamodb.toDynamoDBJson($ctx.identity.sub) \n        }\n    },\n    \"nextToken\" : $util.toJson($util.defaultIfNullOrBlank($ctx.arguments.nextToken, undefined)),\n    \"limit\" :  $util.toJson($ctx.arguments.limit)\n}",
+              "ResponseMappingTemplate": "{\n    \"orders\": $util.toJson($ctx.result.items),\n    \"nextToken\": $util.toJson($util.defaultIfNullOrBlank($ctx.result.nextToken, null))\n}",
+              "Kind": "UNIT",
+              "DataSourceName": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlDsordersTable",
+                  "Name"
+                ]
+              }
+            }
+          },
+          "BookstoreslsapiGraphQlResolverMutationcreateBook": {
+            "Type": "AWS::AppSync::Resolver",
+            "DependsOn": "BookstoreslsapiGraphQlSchema",
+            "Properties": {
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              },
+              "TypeName": "Mutation",
+              "FieldName": "createBook",
+              "RequestMappingTemplate": "{\n    \"version\" : \"2017-02-28\",\n    \"operation\" : \"PutItem\",\n    \"key\": {\n        \"bookId\" : $util.dynamodb.toDynamoDBJson($util.autoId())\n    },\n    \"attributeValues\" : {\n        \"title\"    : $util.dynamodb.toDynamoDBJson($ctx.args.newBook.title),\n        \"description\" : $util.dynamodb.toDynamoDBJson($ctx.args.newBook.description),\n        \"imageUrl\" : $util.dynamodb.toDynamoDBJson($ctx.args.newBook.imageUrl),\n        \"author\" : $util.dynamodb.toDynamoDBJson($ctx.args.newBook.author),\n        \"price\" : $util.dynamodb.toDynamoDBJson($ctx.args.newBook.price),\n        \"createdAt\" : $util.dynamodb.toDynamoDBJson($util.time.nowISO8601()),\n        \"updatedAt\" : $util.dynamodb.toDynamoDBJson($util.time.nowISO8601()),\n    }\n}\n",
+              "ResponseMappingTemplate": "$util.toJson($ctx.result)",
+              "Kind": "UNIT",
+              "DataSourceName": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlDsbooksTable",
+                  "Name"
+                ]
+              }
+            }
+          },
+          "BookstoreslsapiGraphQlResolverMutationcreateOrder": {
+            "Type": "AWS::AppSync::Resolver",
+            "DependsOn": "BookstoreslsapiGraphQlSchema",
+            "Properties": {
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              },
+              "TypeName": "Mutation",
+              "FieldName": "createOrder",
+              "Kind": "UNIT",
+              "DataSourceName": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlDscreateOrderFunction",
+                  "Name"
+                ]
+              }
+            }
+          },
+          "BookstoreslsapiGraphQlResolverOrderbook": {
+            "Type": "AWS::AppSync::Resolver",
+            "DependsOn": "BookstoreslsapiGraphQlSchema",
+            "Properties": {
+              "ApiId": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlApi",
+                  "ApiId"
+                ]
+              },
+              "TypeName": "Order",
+              "FieldName": "book",
+              "RequestMappingTemplate": "{\n    \"version\" : \"2017-02-28\",\n    \"operation\" : \"GetItem\",\n    \"key\" : {\n        \"bookId\" : $util.dynamodb.toDynamoDBJson($ctx.source.bookId)\n    }\n}",
+              "ResponseMappingTemplate": "$util.toJson($ctx.result)",
+              "Kind": "UNIT",
+              "DataSourceName": {
+                "Fn::GetAtt": [
+                  "BookstoreslsapiGraphQlDsbooksTable",
+                  "Name"
+                ]
+              }
+            }
           }
         },
         "Outputs": {
           "ServerlessDeploymentBucketName": {
             "Value": {
               "Ref": "ServerlessDeploymentBucket"
+            }
+          },
+          "CreateOrderLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "CreateOrderLambdaVersionXcxX0oq16lRc4uRn2Vrm3Lcb9gF5HbCoM9FSmAMuy4"
             }
           },
           "BooksTable": {
@@ -379,6 +1013,22 @@
             "Description": "Cognito user pool id",
             "Value": {
               "Ref": "cognitoUserPool"
+            }
+          },
+          "BookstoreslsapiGraphQlApiUrl": {
+            "Value": {
+              "Fn::GetAtt": [
+                "BookstoreslsapiGraphQlApi",
+                "GraphQLUrl"
+              ]
+            }
+          },
+          "BookstoreslsapiGraphQlApiId": {
+            "Value": {
+              "Fn::GetAtt": [
+                "BookstoreslsapiGraphQlApi",
+                "ApiId"
+              ]
             }
           }
         }
@@ -429,21 +1079,6 @@
                             "/*"
                           ]
                         ]
-                      },
-                      {
-                        "Fn::Join": [
-                          "",
-                          [
-                            "arn:",
-                            {
-                              "Ref": "AWS::Partition"
-                            },
-                            ":s3:::",
-                            {
-                              "Ref": "ServerlessDeploymentBucket"
-                            }
-                          ]
-                        ]
                       }
                     ],
                     "Condition": {
@@ -464,10 +1099,112 @@
             }
           }
         }
+      },
+      "vpc": {}
+    },
+    "custom": {
+      "appSync": [
+        {
+          "name": "bookstoreslsapi",
+          "schema": "schema.graphql",
+          "authenticationType": "AMAZON_COGNITO_USER_POOLS",
+          "userPoolConfig": {
+            "awsRegion": "us-east-2",
+            "defaultAction": "ALLOW",
+            "userPoolId": {
+              "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"BookstoreslsapiGraphQlApi\"][\"Properties\"][\"UserPoolConfig\"][\"UserPoolId\"]"
+            }
+          },
+          "mappingTemplatesLocation": "mapping-templates",
+          "mappingTemplates": [
+            {
+              "type": "Query",
+              "field": "getBookById",
+              "dataSource": "booksTable"
+            },
+            {
+              "type": "Query",
+              "field": "listBooks",
+              "dataSource": "booksTable"
+            },
+            {
+              "type": "Query",
+              "field": "myOrders",
+              "dataSource": "ordersTable"
+            },
+            {
+              "type": "Mutation",
+              "field": "createBook",
+              "dataSource": "booksTable"
+            },
+            {
+              "type": "Mutation",
+              "field": "createOrder",
+              "dataSource": "createOrderFunction",
+              "request": false,
+              "response": false
+            },
+            {
+              "type": "Order",
+              "field": "book",
+              "dataSource": "booksTable"
+            }
+          ],
+          "dataSources": [
+            {
+              "type": "AMAZON_DYNAMODB",
+              "name": "booksTable",
+              "config": {
+                "tableName": {
+                  "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"BookstoreslsapiGraphQlDsbooksTableRole\"][\"Properties\"][\"Policies\"][0][\"PolicyDocument\"][\"Statement\"][0][\"Resource\"][0][\"Fn::Join\"][1][5][\"Fn::Join\"][1][1]"
+                }
+              }
+            },
+            {
+              "type": "AMAZON_DYNAMODB",
+              "name": "ordersTable",
+              "config": {
+                "tableName": {
+                  "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"BookstoreslsapiGraphQlDsordersTableRole\"][\"Properties\"][\"Policies\"][0][\"PolicyDocument\"][\"Statement\"][0][\"Resource\"][0][\"Fn::Join\"][1][5][\"Fn::Join\"][1][1]"
+                }
+              }
+            },
+            {
+              "type": "AWS_LAMBDA",
+              "name": "createOrderFunction",
+              "config": {
+                "functionName": "createOrder"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "plugins": [
+      "serverless-appsync-plugin"
+    ],
+    "pluginsData": {},
+    "functions": {
+      "createOrder": {
+        "handler": "functions/createOrder.handler",
+        "environment": {
+          "BOOK_TABLE_NAME": {
+            "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"CreateOrderLambdaFunction\"][\"Properties\"][\"Environment\"][\"Variables\"][\"BOOK_TABLE_NAME\"]"
+          },
+          "ORDER_TABLE_NAME": {
+            "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"CreateOrderLambdaFunction\"][\"Properties\"][\"Environment\"][\"Variables\"][\"ORDER_TABLE_NAME\"]"
+          }
+        },
+        "events": [],
+        "name": "serverless-bookstore-dev-createOrder",
+        "package": {},
+        "memory": 1024,
+        "timeout": 6,
+        "runtime": "nodejs12.x",
+        "vpc": {},
+        "versionLogicalId": "CreateOrderLambdaVersionXcxX0oq16lRc4uRn2Vrm3Lcb9gF5HbCoM9FSmAMuy4"
       }
     },
-    "pluginsData": {},
-    "functions": {},
     "resources": {
       "Resources": {
         "booksTable": {
@@ -475,21 +1212,25 @@
           "Properties": {
             "AttributeDefinitions": [
               {
-                "AttributeName": "BookId",
+                "AttributeName": "bookId",
                 "AttributeType": "S"
               }
             ],
             "BillingMode": "PAY_PER_REQUEST",
             "KeySchema": [
               {
-                "AttributeName": "BookId",
+                "AttributeName": "bookId",
                 "KeyType": "HASH"
               }
             ],
             "Tags": [
               {
+                "Key": "Environment",
+                "Value": "dev"
+              },
+              {
                 "Key": "Name",
-                "Value": "booksTable-dev"
+                "Value": "books-table"
               }
             ]
           }
@@ -499,36 +1240,56 @@
           "Properties": {
             "AttributeDefinitions": [
               {
-                "AttributeName": "UserId",
+                "AttributeName": "userId",
                 "AttributeType": "S"
               },
               {
-                "AttributeName": "OrderId",
+                "AttributeName": "orderId",
                 "AttributeType": "S"
               },
               {
-                "AttributeName": "CreatedAt",
+                "AttributeName": "bookId",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "createdAt",
                 "AttributeType": "S"
               }
             ],
             "BillingMode": "PAY_PER_REQUEST",
             "KeySchema": [
               {
-                "AttributeName": "UserId",
+                "AttributeName": "userId",
                 "KeyType": "HASH"
               },
               {
-                "AttributeName": "CreatedAt",
+                "AttributeName": "orderId",
                 "KeyType": "RANGE"
               }
             ],
             "GlobalSecondaryIndexes": [
               {
-                "IndexName": "byOrderId",
+                "IndexName": "byOrder",
                 "KeySchema": [
                   {
-                    "AttributeName": "OrderId",
+                    "AttributeName": "orderId",
                     "KeyType": "HASH"
+                  }
+                ],
+                "Projection": {
+                  "ProjectionType": "ALL"
+                }
+              },
+              {
+                "IndexName": "byBook",
+                "KeySchema": [
+                  {
+                    "AttributeName": "bookId",
+                    "KeyType": "HASH"
+                  },
+                  {
+                    "AttributeName": "createdAt",
+                    "KeyType": "RANGE"
                   }
                 ],
                 "Projection": {
@@ -538,8 +1299,12 @@
             ],
             "Tags": [
               {
+                "Key": "Environment",
+                "Value": "dev"
+              },
+              {
                 "Key": "Name",
-                "Value": "ordersTable-dev"
+                "Value": "orders-table"
               }
             ]
           }
@@ -567,7 +1332,12 @@
             "ClientName": "Web",
             "UserPoolId": {
               "Ref": "cognitoUserPool"
-            }
+            },
+            "ExplicitAuthFlows": [
+              "ALLOW_USER_SRP_AUTH",
+              "ALLOW_USER_PASSWORD_AUTH",
+              "ALLOW_REFRESH_TOKEN_AUTH"
+            ]
           }
         },
         "cognitoAdminGroup": {
@@ -767,28 +1537,54 @@
     "serviceFilename": "serverless.yml",
     "layers": {},
     "initialServerlessConfig": {
-      "service": {
-        "$ref": "$[\"service\"][\"serviceObject\"]"
-      },
+      "service": "serverless-bookstore",
       "frameworkVersion": "2",
       "provider": {
-        "$ref": "$[\"service\"][\"provider\"]"
+        "name": "aws",
+        "runtime": "nodejs12.x",
+        "lambdaHashingVersion": 20201221,
+        "stage": "dev",
+        "region": "us-east-2",
+        "iamRoleStatements": [
+          {
+            "Effect": "Allow",
+            "Action": "dynamodb:BatchWriteItem",
+            "Resource": {
+              "Fn::GetAtt": [
+                "ordersTable",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      },
+      "custom": {
+        "$ref": "$[\"service\"][\"custom\"]"
+      },
+      "plugins": {
+        "$ref": "$[\"service\"][\"plugins\"]"
+      },
+      "functions": {
+        "$ref": "$[\"service\"][\"functions\"]"
       },
       "package": {
         "exclude": [
           "package.json",
+          "package-lock.json",
           "README.md"
         ],
-        "artifactDirectoryName": "serverless/serverless-bookstore/dev/1612640456188-2021-02-06T19:40:56.188Z"
+        "artifact": "/Users/manojf/Desktop/serverless-bookstore/backend/.serverless/serverless-bookstore.zip",
+        "artifactDirectoryName": "serverless/serverless-bookstore/dev/1613771467585-2021-02-19T21:51:07.585Z"
       },
       "resources": {
         "$ref": "$[\"service\"][\"resources\"]"
       }
     },
-    "isDashboardMonitoringPreconfigured": false
+    "isDashboardMonitoringPreconfigured": false,
+    "artifact": "/Users/manojf/Desktop/serverless-bookstore/backend/.serverless/serverless-bookstore.zip"
   },
   "package": {
-    "artifactDirectoryName": "serverless/serverless-bookstore/dev/1612640456188-2021-02-06T19:40:56.188Z",
-    "artifact": ""
+    "artifactDirectoryName": "serverless/serverless-bookstore/dev/1613771467585-2021-02-19T21:51:07.585Z",
+    "artifact": "serverless-bookstore.zip"
   }
 }

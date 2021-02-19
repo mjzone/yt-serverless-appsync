@@ -1,0 +1,45 @@
+name: bookstoreslsapi
+schema: schema.graphql
+authenticationType: AMAZON_COGNITO_USER_POOLS
+userPoolConfig:
+  awsRegion: us-east-2
+  defaultAction: ALLOW
+  userPoolId: !Ref cognitoUserPool
+mappingTemplatesLocation: mapping-templates
+mappingTemplates:
+  - type: Query
+    field: getBookById
+    dataSource: booksTable
+  - type: Query
+    field: listBooks
+    dataSource: booksTable
+  - type: Query
+    field: myOrders
+    dataSource: ordersTable
+  - type: Mutation
+    field: createBook
+    dataSource: booksTable
+  - type: Mutation
+    field: createOrder
+    dataSource: createOrderFunction
+    request: false
+    response: false
+  - type: Order
+    field: book
+    dataSource: booksTable
+
+    
+# Define data sources here
+dataSources:
+  - type: AMAZON_DYNAMODB
+    name: booksTable
+    config:
+      tableName: !Ref booksTable
+  - type: AMAZON_DYNAMODB
+    name: ordersTable
+    config:
+      tableName: !Ref ordersTable
+  - type: AWS_LAMBDA
+    name: createOrderFunction
+    config:
+      functionName: createOrder

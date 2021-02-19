@@ -5,9 +5,13 @@
   "description": "1. Create serverless project  2. Create the resources 3. Create the appsync api 4. Deploy and test",
   "main": "handler.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "sls": "sls"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "serverless-appsync-plugin": "^1.4.0",
+    "serverless": "2.4.0"
+  }
 }
